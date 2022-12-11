@@ -9,6 +9,9 @@ from pathlib import Path
 from Bio import SeqIO
 import argparse
 
+__author__ = "Jorge Navarro"
+__version__ = 1.1
+
 
 def arg_parser():
     parser = argparse.ArgumentParser(description="CDS collapser. Removes \
@@ -17,13 +20,12 @@ def arg_parser():
     parser.add_argument("-i", "--inputfolders", nargs='+', type=Path, \
         help="Folder(s) to search (recursively) for .gb, .gbk and .gbff files.")
     parser.add_argument("-f", "--files", nargs='+', type=Path, \
-        help="Input individual files (accepted: .gb .gbk, .bgc, .bgccase, \
-        .fasta, .proteincase).")
+        help="Input individual files (accepted: .gb .gbk, .gbff.")
 
     default_output = Path("./") / "output"
     parser.add_argument("-o", "--outputfolder", default=default_output, 
         help=f"Base folder where results will be put " \
-        f"(default='{default_output}').")
+        f"(default='{default_output}').", type=Path)
 
     return parser.parse_args()
 
@@ -104,14 +106,14 @@ def de_overlap(file_list: list) -> tuple((dict, set)):
 
             # find all groups of overlapping CDS features in current record
             for group in find_overlaps(CDS_list):
-                if len(group) == 1: continue
+                if len(group) < 2: continue
 
                 # find longest CDS
                 max_len = 0
                 index_max = -1
                 for idx, (start, end, CDS) in enumerate(group):
-                    if end - start + 1 > max_len:
-                        max_len = end - start + 1
+                    if len(CDS.qualifiers['translation'][0]) > max_len:
+                        max_len = len(CDS.qualifiers['translation'][0])
                         index_max = idx
 
                 # remove smaller CDSs
@@ -119,12 +121,14 @@ def de_overlap(file_list: list) -> tuple((dict, set)):
                     mark = ""
                     if idx == index_max: mark = ' <---'
                     print(f"{rec.id}\t{start}-{end} "\
-                        f"{CDS.qualifiers['protein_id'][0]} {mark}")
+                        f"{CDS.qualifiers['protein_id'][0]}\t"\
+                        f"{len(CDS.qualifiers['translation'][0])} {mark}")
 
                     if idx != index_max:
                         # del CDS
                         rec.features.remove(CDS)
                         modified.add(gbk.stem)
+                print()
         
         records[gbk.stem] = (gbk_recs)
 
