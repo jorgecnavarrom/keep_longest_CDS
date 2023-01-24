@@ -10,7 +10,7 @@ from Bio import SeqIO
 import argparse
 
 __author__ = "Jorge Navarro"
-__version__ = 1.1
+__version__ = 1.2
 
 
 def arg_parser():
@@ -34,7 +34,7 @@ def get_file_list(individual_files: list, inputfolders: list) -> list:
     """Creates a single list of GenBank files
     """
 
-    gbk_suffixes = {'gbk', 'gb', 'gbff'}
+    gbk_suffixes = {'.gbk', '.gb', '.gbff'}
     all_found_files = set()
 
     try:
@@ -44,11 +44,12 @@ def get_file_list(individual_files: list, inputfolders: list) -> list:
     except TypeError:
         pass
 
-    for folder in inputfolders:
-        if folder.is_dir():
-            for suffix in gbk_suffixes:
-                for gbk in folder.rglob(f"*.{suffix}"):
-                    all_found_files.add(gbk)
+    if inputfolders:
+        for folder in inputfolders:
+            if folder.is_dir():
+                for suffix in gbk_suffixes:
+                    for gbk in folder.rglob(f"*.{suffix}"):
+                        all_found_files.add(gbk)
 
     return list(all_found_files)
 
@@ -57,21 +58,26 @@ def find_overlaps(CDS_list: list) -> list:
     """Finds groups of overlapping CDS
 
     CDS_list (list). Items: (start, end, CDS object)
+    
+    Yields:
+    ---
+    groups of indices corresponding to overlapping regions
     """
 
     regions = sorted(CDS_list, key=lambda tup: tup[0])
-    group = [regions[0]]
+    group = [0]
 
     curr_start, curr_end, cds = regions[0]
-    for region in regions[1:]:
+    for idx, region in enumerate(regions[1:]):
         start, end, cds = region
 
         if start <= curr_end:
             curr_end = max(end, curr_end)
-            group.append(region)
+            group.append(idx+1)
         else:
             yield group
-            group = []
+            group = [idx+1]
+            curr_end = end
 
     if group:
         yield group
@@ -105,30 +111,40 @@ def de_overlap(file_list: list) -> tuple((dict, set)):
                 CDS_list.append((cds_start, cds_end, CDS))
 
             # find all groups of overlapping CDS features in current record
+            idx_to_pop = []
             for group in find_overlaps(CDS_list):
                 if len(group) < 2: continue
 
                 # find longest CDS
                 max_len = 0
                 index_max = -1
-                for idx, (start, end, CDS) in enumerate(group):
+                for idx in group:
+                    start, end, CDS = CDS_list[idx]
                     if len(CDS.qualifiers['translation'][0]) > max_len:
                         max_len = len(CDS.qualifiers['translation'][0])
                         index_max = idx
 
                 # remove smaller CDSs
-                for  idx, (start, end, CDS) in enumerate(group):
+                for idx in group:
+                    start, end, CDS = CDS_list[idx]
                     mark = ""
-                    if idx == index_max: mark = ' <---'
+                    if idx == index_max: 
+                        mark = ' <---'
+                    else:
+                        idx_to_pop.append(idx)
+                        
                     print(f"{rec.id}\t{start}-{end} "\
                         f"{CDS.qualifiers['protein_id'][0]}\t"\
                         f"{len(CDS.qualifiers['translation'][0])} {mark}")
 
-                    if idx != index_max:
-                        # del CDS
-                        rec.features.remove(CDS)
-                        modified.add(gbk.stem)
                 print()
+
+            if idx_to_pop:
+                modified.add(gbk.stem)
+
+            for idx in idx_to_pop:
+                start, end, CDS = CDS_list[idx]
+                rec.features.remove(CDS)
         
         records[gbk.stem] = (gbk_recs)
 
@@ -154,6 +170,7 @@ def main():
 
     # collect files
     file_list = get_file_list(args.files, args.inputfolders)
+    print(file_list)
 
     # process files and 
     processed_records, modified_records = de_overlap(file_list)
