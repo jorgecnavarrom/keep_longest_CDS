@@ -48,7 +48,7 @@ def get_file_list(individual_files: list, inputfolders: list) -> list:
         for folder in inputfolders:
             if folder.is_dir():
                 for suffix in gbk_suffixes:
-                    for gbk in folder.rglob(f"*.{suffix}"):
+                    for gbk in folder.rglob(f"*{suffix}"):
                         all_found_files.add(gbk)
 
     return list(all_found_files)
@@ -68,15 +68,15 @@ def find_overlaps(CDS_list: list) -> list:
     group = [0]
 
     curr_start, curr_end, cds = regions[0]
-    for idx, region in enumerate(regions[1:]):
+    for idx, region in enumerate(regions[1:], start=1):
         start, end, cds = region
 
         if start <= curr_end:
             curr_end = max(end, curr_end)
-            group.append(idx+1)
+            group.append(idx)
         else:
             yield group
-            group = [idx+1]
+            group = [idx]
             curr_end = end
 
     if group:
@@ -170,7 +170,7 @@ def main():
 
     # collect files
     file_list = get_file_list(args.files, args.inputfolders)
-    print(file_list)
+    # print(file_list)
 
     # process files and 
     processed_records, modified_records = de_overlap(file_list)
